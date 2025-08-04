@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Refleks Oyunu - Ters Mod Skor Eksilten</title>
+<style>
+  body {
+    margin: 0; font-family: Arial, sans-serif; overflow: hidden; background: #111; color: white; text-align: center;
+  }
+  #gameArea {
+    width: 100vw; height: 100vh; position: relative; overflow: hidden;
+  }
+  .circle {
+    border-radius: 50%; position: absolute; cursor: pointer; display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 8px #0f0;
+  }
+  #scoreBoard, #bestScoreBoard {
+    position: absolute; font-size: 20px; user-select: none;
+  }
+  #scoreBoard { top: 10px; left: 10px; }
+  #bestScoreBoard { top: 10px; right: 10px; }
+  #timerBar {
+    position: absolute; top: 0; left: 0; height: 10px; background-color: lime; transition: width 1s linear;
+  }
+  #levelUp {
+    position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%);
+    font-size: 36px; color: cyan; opacity: 0; transition: opacity 0.5s ease;
+    user-select: none;
+  }
+  #startBtn, #modeSelect {
+    position: absolute; padding: 15px 30px; font-size: 18px; border-radius: 10px; border: none; cursor: pointer;
+    user-select: none;
+  }
+  #startBtn {
+    top: 50%; left: 50%; transform: translate(-50%, -50%);
+    background: lime; color: black;
+  }
+  #modeSelect {
+    top: 60%; left: 50%; transform: translate(-50%, -50%);
+    background: #444; color: white;
+    width: 200px;
+  }
+  #achievements {
+    position: absolute; bottom: 10px; left: 10px; font-size: 16px; max-width: 300px; text-align: left;
+    background: rgba(0,0,0,0.5); padding: 10px; border-radius: 10px; user-select: none;
+    max-height: 150px; overflow-y: auto;
+  }
+  #exportBtn {
+    position: absolute; bottom: 10px; right: 10px; padding: 10px 20px; border-radius: 10px;
+    border: none; background: orange; cursor: pointer; user-select: none;
+  }
+</style>
+</head>
+<body>
+
+<div id="gameArea">
+  <div id="scoreBoard">Skor: 0</div>
+  <div id="bestScoreBoard">En İyi: 0</div>
+  <div id="timerBar"></div>
+  <div id="levelUp">LEVEL UP!</div>
+  <button id="startBtn">Başla</button>
+  <select id="modeSelect">
+    <option value="time">Zamanlı Mod (30s)</option>
+    <option value="infinite">Sonsuz Mod</option>
+    <option value="reverse">Ters Mod</option>
+    <option value="impossible">İmkansız Mod</option>
+  </select>
+  <div id="achievements"></div>
+  <button id="exportBtn">Skorları Dışa Aktar</button>
+</div>
+
+<audio id="clickSound" src="click.mp3"></audio>
+<audio id="bgMusic" src="bgmusic.mp3" loop></audio>
+
+<script>
+  const gameArea = document.getElementById('gameArea');
+  const scoreBoard = document.getElementById('scoreBoard');
+  const bestScoreBoard = document.getElementById('bestScoreBoard');
+  const timerBar = document.getElementById('timerBar');
+  const levelUp = document.getElementById('levelUp');
+  const startBtn = document.getElementById('startBtn');
+  const modeSelect = document.getElementById('modeSelect');
+  const achievementsDiv = document.getElementById('achievements');
+  const exportBtn = document.getElementById('exportBtn');
+  const clickSound = document.getElementById('clickSound');
+  const bgMusic = document.getElementById('bgMusic');
+
+  let score = 0;
+  let bestScore = Number(localStorage.getItem('bestScore')) || 0;
+  let timeLeft = 30;
+  let level = 1;
+  let lastClick = 0;
+  let countdown;
+  let mode = 'time';
+  let achievements = [];
+
+  let totalClicks = 0;
+  let clickTimes = [];
+  let startTime = 0;
+  let moveInterval = null;
+
+  bestScoreBoard.textContent = `En İyi: ${bestScore}`;
+  achievementsDiv.style.display = 'none';
+  exportBtn.style.display = 'none';
+
+  startBtn.onclick = () => {
+    mode = modeSelect.value;
+    startGame();
+  };
+  exportBtn.onclick = exportScores;
+
+  function startGame() {
+    score = 0; timeLeft = (mode === 'impossible' ? 15 : 30); level = 1; lastClick = 0;
+    totalClicks = 0; clickTimes = [];
+    startTime = Date.now();
+    scoreBoard.textContent = `Skor: ${score}`;
+    timerBar.style.width = '100%';
+    levelUp.style.opacity = 0;
+    achievementsDiv.innerHTML = '';
+    achievements = [];
+    achievementsDiv.style.display = 'block';
+    exportBtn.style.display = 'block';
+    startBtn.style.display = 'none';
+    modeSelect.style.display = 'none';
+    bgMusic.play();
+
+    if (mode === 'time' || mode === 'reverse') {
+      countdown = setInterval(() => {
+        timeLeft--;
+        timerBar.style.width = `${(timeLeft / 30) * 100}%`;
+        if (timeLeft <= 0) endGame();
+      }, 1000);
+    } else if (mode === 'impossible') {
+      countdown = setInterval(() => {
+        timeLeft--;
+        timerBar.style.width = `${(timeLeft / 15) * 100}%`;
+        if (timeLeft <= 0) endGame();
+      }, 1000);
+    } else {
+      timerBar.style.width = '100%';
+    }
+
+    spawnCircle();
+  }
+
+  function spawnCircle() {
+    const oldCircle = document.querySelector('.circle');
+    if (oldCircle) {
+      oldCircle.remove();
+      if (moveInterval) {
+        clearInterval(moveInterval);
+        moveInterval = null;
+      }
+    }
+
+    const circle = document.createElement('div');
+    circle.classList.add('circle');
+
+    let size = mode === 'impossible' ? 20 + Math.random() * 10 : 30 + Math.random() * 30;
+    circle.style.width = size + 'px';
+    circle.style.height = size + 'px';
+
+    // Başlangıç pozisyonu
+    let left = Math.random() * (window.innerWidth - size);
+    let top = Math.random() * (window.innerHeight - size);
+
+    circle.style.left = left + 'px';
+    circle.style.top = top + 'px';
+
+    gameArea.appendChild(circle);
+
+    circle.onclick = () => {
+      clickSound.currentTime = 0;
+      clickSound.play();
+
+      if (mode === 'reverse') {
+        updateScore(-1); // Ters modda skor düşsün
+      } else {
+        updateScore(1);  // Diğer modlarda skor artsın
+      }
+
+      if (mode !== 'impossible') {
+        spawnCircle();
+      }
+    };
+
+    if (mode === 'impossible') {
+      moveInterval = setInterval(() => {
+        left = Math.random() * (window.innerWidth - size);
+        top = Math.random() * (window.innerHeight - size);
+        circle.style.left = left + 'px';
+        circle.style.top = top + 'px';
+      }, 500);
+    }
+  }
+
+  function updateScore(val) {
+    score += val;
+    if (score < 0) score = 0;
+    scoreBoard.textContent = `Skor: ${score}`;
+    if (score > bestScore) {
+      bestScore = score;
+      bestScoreBoard.textContent = `En İyi: ${bestScore}`;
+      localStorage.setItem('bestScore', bestScore);
+    }
+  }
+
+  function endGame() {
+    clearInterval(countdown);
+    startBtn.style.display = 'block';
+    modeSelect.style.display = 'block';
+    bgMusic.pause();
+    bgMusic.currentTime = 0;
+    achievementsDiv.style.display = 'none';
+    exportBtn.style.display = 'none';
+    if (moveInterval) {
+      clearInterval(moveInterval);
+      moveInterval = null;
+    }
+  }
+
+  function exportScores() {
+    const dataStr = JSON.stringify({
+      bestScore,
+      achievements,
+      lastPlayed: new Date().toISOString(),
+    }, null, 2);
+    const blob = new Blob([dataStr], {type: 'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'refleks_oyunu_skorlar.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+</script>
+
+</body>
+</html>
